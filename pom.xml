@@ -30,7 +30,9 @@
         <shadowmanagerjar.name>aws.greengrass.ShadowManager</shadowmanagerjar.name>
 
         <sqlite.version>3.46.0.1</sqlite.version>
-        <nucleus.version>2.5.0-SNAPSHOT</nucleus.version>
+
+        <nucleus.version>2.6.0-SNAPSHOT</nucleus.version>
+
         <junit.version>5.6.2</junit.version>
         <mockito.version>4.3.1</mockito.version>
         <lombok.version>1.18.26</lombok.version>

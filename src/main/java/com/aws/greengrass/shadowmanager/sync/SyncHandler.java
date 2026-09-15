@@ -7,6 +7,7 @@ package com.aws.greengrass.shadowmanager.sync;
 
 import com.aws.greengrass.logging.api.Logger;
 import com.aws.greengrass.logging.impl.LogManager;
+import com.aws.greengrass.shadowmanager.model.ShadowDocument;
 import com.aws.greengrass.shadowmanager.model.configuration.ThingShadowSyncConfiguration;
 import com.aws.greengrass.shadowmanager.sync.model.BaseSyncRequest;
 import com.aws.greengrass.shadowmanager.sync.model.CloudDeleteSyncRequest;
@@ -88,7 +89,7 @@ public class SyncHandler {
     /**
      * Request queue.
      */
-    private final RequestBlockingQueue syncQueue;
+    private final RequestQueue syncQueue;
     // retry wrapper so that requests can be mocked
     // setter is used in integ tests only
     @Setter
@@ -111,7 +112,7 @@ public class SyncHandler {
      */
     @Inject
     public SyncHandler(ExecutorService executorService, ScheduledExecutorService syncScheduledExecutorService,
-                       RequestBlockingQueue syncQueue, DirectionWrapper direction) {
+                       RequestQueue syncQueue, DirectionWrapper direction) {
         this(executorService, syncScheduledExecutorService, retryer, syncQueue, direction);
     }
 
@@ -125,7 +126,7 @@ public class SyncHandler {
      * @param direction                    The sync direction
      */
     private SyncHandler(ExecutorService executorService, ScheduledExecutorService syncScheduledExecutorService,
-                        Retryer retryer, RequestBlockingQueue syncQueue, DirectionWrapper direction) {
+                        Retryer retryer, RequestQueue syncQueue, DirectionWrapper direction) {
         this(new SyncStrategyFactory(retryer, executorService, syncScheduledExecutorService, direction),
                 syncQueue, direction);
     }
@@ -137,7 +138,7 @@ public class SyncHandler {
      * @param syncQueue           a request queue.
      * @param direction           The sync direction
      */
-    SyncHandler(SyncStrategyFactory syncStrategyFactory, RequestBlockingQueue syncQueue, DirectionWrapper direction) {
+    SyncHandler(SyncStrategyFactory syncStrategyFactory, RequestQueue syncQueue, DirectionWrapper direction) {
         this.syncStrategyFactory = syncStrategyFactory;
         this.syncQueue = syncQueue;
         this.direction = direction;
@@ -162,12 +163,6 @@ public class SyncHandler {
 
         List<Pair<String, String>> shadows = context.getDao().listSyncedShadows();
 
-        if (shadows.size() > overallSyncStrategy.getRemainingCapacity()) {
-            logger.atWarn(SYNC_EVENT_TYPE)
-                    .addKeyValue("syncedShadows", shadows.size())
-                    .addKeyValue("syncQueueCapacity", overallSyncStrategy.getRemainingCapacity())
-                    .log("There are more shadows than space in the sync queue. Syncing will block");
-        }
         Stream<BaseSyncRequest> requestStream = null;
         switch (direction.get()) {
             case BETWEEN_DEVICE_AND_CLOUD:
@@ -230,10 +225,13 @@ public class SyncHandler {
      * @param thingName      The thing name associated with the sync shadow update
      * @param shadowName     The shadow name associated with the sync shadow update
      * @param updateDocument The update shadow request
+     * @param localShadowDocument The local shadow document state at the time of the update
      */
-    public void pushCloudUpdateSyncRequest(String thingName, String shadowName, JsonNode updateDocument) {
+    public void pushCloudUpdateSyncRequest(String thingName, String shadowName, JsonNode updateDocument,
+                                           ShadowDocument localShadowDocument) {
         if (isShadowSynced(thingName, shadowName) && !Direction.CLOUD_TO_DEVICE.equals(direction.get())) {
-            overallSyncStrategy.putSyncRequest(new CloudUpdateSyncRequest(thingName, shadowName, updateDocument));
+            overallSyncStrategy.putSyncRequest(new CloudUpdateSyncRequest(thingName, shadowName, updateDocument,
+                    localShadowDocument));
         }
     }
 

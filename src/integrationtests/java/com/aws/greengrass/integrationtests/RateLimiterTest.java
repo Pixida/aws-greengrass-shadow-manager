@@ -12,7 +12,7 @@ import com.aws.greengrass.shadowmanager.exception.IoTDataPlaneClientCreationExce
 import com.aws.greengrass.shadowmanager.exception.ThrottledRequestException;
 import com.aws.greengrass.shadowmanager.model.ShadowDocument;
 import com.aws.greengrass.shadowmanager.model.dao.SyncInformation;
-import com.aws.greengrass.shadowmanager.sync.RequestBlockingQueue;
+import com.aws.greengrass.shadowmanager.sync.RequestQueue;
 import com.aws.greengrass.shadowmanager.sync.SyncHandler;
 import com.aws.greengrass.shadowmanager.sync.strategy.RealTimeSyncStrategy;
 import com.aws.greengrass.shadowmanager.util.JsonUtil;
@@ -98,16 +98,17 @@ class RateLimiterTest extends NucleusLaunchUtils {
         when(mockUpdateThingShadowResponse.payload()).thenReturn(SdkBytes.fromString("{\"version\": 1}", UTF_8));
         when(iotDataPlaneClientFactory.getIotDataPlaneClient().updateThingShadow(any(software.amazon.awssdk.services.iotdataplane.model.UpdateThingShadowRequest.class)))
                 .thenReturn(mockUpdateThingShadowResponse);
+        ShadowDocument shadowDocument = new ShadowDocument(localShadowContentV1.getBytes());
 
         // mock dao calls in cloud update
-        when(dao.getShadowThing(anyString(), anyString())).thenReturn(Optional.of(new ShadowDocument(localShadowContentV1.getBytes())));
+        when(dao.getShadowThing(anyString(), anyString())).thenReturn(Optional.of(shadowDocument));
         when(dao.getShadowSyncInformation(anyString(), anyString())).thenReturn(
                 Optional.of(SyncInformation.builder()
                         .lastSyncedDocument(lastSyncedDocument.getBytes())
                         .cloudVersion(0).build()));
         lenient().when(dao.updateSyncInformation(any(SyncInformation.class))).thenReturn(true);
-        RequestBlockingQueue queue = spy(kernel.getContext().get(RequestBlockingQueue.class));
-        kernel.getContext().put(RequestBlockingQueue.class, queue);
+        RequestQueue queue = spy(kernel.getContext().get(RequestQueue.class));
+        kernel.getContext().put(RequestQueue.class, queue);
 
         startNucleusWithConfig(NucleusLaunchUtilsConfig.builder().configFile("rateLimits.yaml").mockCloud(true).mockDao(true).build());
         SyncHandler syncHandler = kernel.getContext().get(SyncHandler.class);
@@ -118,7 +119,7 @@ class RateLimiterTest extends NucleusLaunchUtils {
         // thingName has to be unique to prevent requests from being merged
         final int totalRequestCalls = 10;
         for (int i = 0; i < totalRequestCalls; i++) {
-            syncHandler.pushCloudUpdateSyncRequest(String.valueOf(i), CLASSIC_SHADOW_IDENTIFIER, updateDocument);
+            syncHandler.pushCloudUpdateSyncRequest(String.valueOf(i), CLASSIC_SHADOW_IDENTIFIER, updateDocument, shadowDocument);
         }
 
         // verify that some requests have been throttled

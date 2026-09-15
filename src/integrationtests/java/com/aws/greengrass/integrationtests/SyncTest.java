@@ -19,7 +19,7 @@ import com.aws.greengrass.shadowmanager.model.ShadowDocument;
 import com.aws.greengrass.shadowmanager.model.UpdateThingShadowHandlerResponse;
 import com.aws.greengrass.shadowmanager.model.configuration.ThingShadowSyncConfiguration;
 import com.aws.greengrass.shadowmanager.model.dao.SyncInformation;
-import com.aws.greengrass.shadowmanager.sync.RequestBlockingQueue;
+import com.aws.greengrass.shadowmanager.sync.RequestQueue;
 import com.aws.greengrass.shadowmanager.sync.RequestMerger;
 import com.aws.greengrass.shadowmanager.sync.SyncHandler;
 import com.aws.greengrass.shadowmanager.sync.model.CloudUpdateSyncRequest;
@@ -135,7 +135,7 @@ class SyncTest extends NucleusLaunchUtils {
     @Mock
     UpdateThingShadowResponse mockUpdateThingShadowResponse;
 
-    RequestBlockingQueue syncQueue;
+    RequestQueue syncQueue;
 
     @Captor
     private ArgumentCaptor<SyncInformation> syncInformationCaptor;
@@ -152,8 +152,8 @@ class SyncTest extends NucleusLaunchUtils {
         // Set this property for kernel to scan its own classpath to find plugins
         System.setProperty("aws.greengrass.scanSelfClasspath", "true");
         kernel = new Kernel();
-        syncQueue = spy(new RequestBlockingQueue(new RequestMerger(new DirectionWrapper())));
-        kernel.getContext().put(RequestBlockingQueue.class, syncQueue);
+        syncQueue = spy(new RequestQueue(new RequestMerger(new DirectionWrapper())));
+        kernel.getContext().put(RequestQueue.class, syncQueue);
         syncInfo = () -> kernel.getContext().get(ShadowManagerDAOImpl.class).getShadowSyncInformation(MOCK_THING_NAME_1,
                 CLASSIC_SHADOW);
         localShadow = () -> kernel.getContext().get(ShadowManagerDAOImpl.class).getShadowThing(MOCK_THING_NAME_1,
@@ -532,7 +532,7 @@ class SyncTest extends NucleusLaunchUtils {
 
         assertEmptySyncQueue(clazz);
         verify(syncHandler, after(10000).atLeast(4))
-                .pushCloudUpdateSyncRequest(anyString(), anyString(), any(JsonNode.class));
+                .pushCloudUpdateSyncRequest(anyString(), anyString(), any(JsonNode.class), any(ShadowDocument.class));
         assertThat("sync info exists", () -> syncInfo.get().isPresent(), eventuallyEval(is(true)));
         assertThat("local shadow exists", localShadow.get().isPresent(), is(true));
         ShadowDocument shadowDocument = localShadow.get().get();
@@ -607,7 +607,7 @@ class SyncTest extends NucleusLaunchUtils {
 
         assertEmptySyncQueue(clazz);
         verify(syncHandler, after(10000).times(4))
-                .pushCloudUpdateSyncRequest(anyString(), anyString(), any(JsonNode.class));
+                .pushCloudUpdateSyncRequest(anyString(), anyString(), any(JsonNode.class), any(ShadowDocument.class));
         assertThat("sync info exists", () -> syncInfo.get().isPresent(), eventuallyEval(is(true)));
         assertThat("local shadow exists", localShadow.get().isPresent(), is(true));
         ShadowDocument shadowDocument = localShadow.get().get();
@@ -890,7 +890,7 @@ class SyncTest extends NucleusLaunchUtils {
         request.setPayload(localShadowContentV1.getBytes(UTF_8));
         updateHandler.handleRequest(request, "DoAll");
         verify(syncHandler, timeout(Duration.ofSeconds(10).toMillis()).times(1))
-                .pushCloudUpdateSyncRequest(any(), any(), any());
+                .pushCloudUpdateSyncRequest(any(), any(), any(), any());
         verify(iotDataPlaneClientFactory.getIotDataPlaneClient(), after(Duration.ofSeconds(5).toMillis()).never())
                 .updateThingShadow(any(software.amazon.awssdk.services.iotdataplane.model.UpdateThingShadowRequest.class));
     }

@@ -24,6 +24,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.stream.Stream;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -117,10 +119,22 @@ public class ShadowManagerDatabase implements Closeable {
         // Validate that after migration we're actually able to open and connect to the DB.
         // This may fail if closing the DB after migration failed for some reason.
         try {
-            try (Connection p = getPool().getConnection()) {}
+            try (Connection p = getPool().getConnection(); Statement st = p.createStatement()) {
+                st.execute("SELECT 1");
+                // SELECT 1 is a constant expression and never reads the database
+                // file, so it passes even on a file that is not a database at all.
+                // Reading the schema forces SQLite to actually open and parse it.
+                st.execute("SELECT count(*) FROM sqlite_master");
+            }
             return true;
-        } catch (Exception e) {
+        } catch (SQLException e) {
             logger.atError().cause(e).log("Shadow manager DB could not be opened. Deleting and recreating it");
+            close();
+            return false;
+        } catch (Exception e) {
+            logger.atError().cause(e).log(
+                "Shadow manager DB could not be opened (generic exception): " + e.getMessage()
+            );
             close();
             return false;
         }

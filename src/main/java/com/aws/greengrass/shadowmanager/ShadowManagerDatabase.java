@@ -121,7 +121,10 @@ public class ShadowManagerDatabase implements Closeable {
         try {
             try (Connection p = getPool().getConnection(); Statement st = p.createStatement()) {
                 st.execute("SELECT 1");
-                st.execute("CHECKPOINT");
+                // SELECT 1 is a constant expression and never reads the database
+                // file, so it passes even on a file that is not a database at all.
+                // Reading the schema forces SQLite to actually open and parse it.
+                st.execute("SELECT count(*) FROM sqlite_master");
             }
             return true;
         } catch (SQLException e) {
